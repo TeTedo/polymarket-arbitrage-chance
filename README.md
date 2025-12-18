@@ -1,34 +1,34 @@
-# Polymarket 아비트라지 기회 포착 시스템
+# Polymarket Arbitrage Opportunity Detection System
 
-Polymarket 예측시장에서 fullset을 이용한 아비트라지 기회를 자동으로 포착하고 데이터베이스에 저장하는 스케줄링 시스템입니다.
+An automated scheduling system that detects and stores arbitrage opportunities using fullsets in the Polymarket prediction market.
 
-## 기능
+## Features
 
-- Polymarket API에서 마켓 및 오더북 데이터 주기적으로 수집
-- Yes/No 토큰 페어의 fullset 가격 계산
-- 아비트라지 기회 감지:
-  - 즉시 구매 가격이 100 미만인 경우
-  - 즉시 판매 가격이 100 초과인 경우
-- 발견된 기회를 MySQL 데이터베이스에 저장
+- Periodically collects market and orderbook data from Polymarket API
+- Calculates fullset prices for Yes/No token pairs
+- Detects arbitrage opportunities:
+  - When immediate buy price (asks sum) is below 100
+  - When immediate sell price (bids sum) is above 100
+- Stores detected opportunities in MySQL database
 
-## 기술 스택
+## Tech Stack
 
 - Node.js
 - TypeScript
 - TypeORM
 - MySQL
-- node-cron (스케줄링)
-- axios (API 호출)
+- node-cron (Scheduling)
+- axios (API calls)
 
-## 설치
+## Installation
 
 ```bash
 npm install
 ```
 
-## 환경 변수 설정
+## Environment Variables
 
-`.env` 파일을 생성하고 다음 변수들을 설정하세요:
+Create a `.env` file and configure the following variables:
 
 ```env
 # Database
@@ -39,68 +39,78 @@ DB_PASSWORD=your_password
 DB_NAME=polymarket_arbitrage
 
 # Polymarket API Configuration
-POLYMARKET_API_BASE_URL=https://clob.polymarket.com
-POLYMARKET_API_KEY=YOUR_API_KEY
+POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
 
 # Scheduler Configuration
-CRON_SCHEDULE=*/5 * * * *  # 5분마다 실행
+CRON_SCHEDULE=*/5 * * * *  # Run every 5 minutes
 
 # Environment
 NODE_ENV=development
 ```
 
-## 데이터베이스 설정
+## Database Setup
 
-MySQL 데이터베이스를 생성하세요:
+Create a MySQL database:
 
 ```sql
 CREATE DATABASE polymarket_arbitrage;
 ```
 
-TypeORM이 자동으로 테이블을 생성합니다 (개발 환경에서 `synchronize: true` 설정).
+TypeORM will automatically create tables (with `synchronize: true` in development environment).
 
-## 실행
+## Running
 
-### 개발 모드
+### Development Mode
 
 ```bash
 npm run dev
 ```
 
-### 프로덕션 모드
+### Production Mode
 
 ```bash
 npm run build
 npm start
 ```
 
-## 프로젝트 구조
+## Project Structure
 
 ```
 src/
 ├── api/
-│   └── polymarketClient.ts      # Polymarket API 클라이언트
+│   └── polymarketClient.ts      # Polymarket API client
 ├── config/
-│   └── database.ts               # TypeORM 데이터소스 설정
+│   └── database.ts               # TypeORM data source configuration
 ├── entities/
-│   └── ArbitrageOpportunity.ts  # 아비트라지 기회 엔티티
+│   └── ArbitrageOpportunity.ts  # Arbitrage opportunity entity
 ├── scheduler/
-│   └── arbitrageScheduler.ts    # 스케줄러
+│   └── arbitrageScheduler.ts    # Scheduler
 ├── services/
-│   └── arbitrageService.ts      # 아비트라지 로직 서비스
+│   └── arbitrageService.ts      # Arbitrage logic service
 ├── types/
-│   └── polymarket.ts            # TypeScript 타입 정의
-└── index.ts                     # 메인 진입점
+│   └── polymarket.ts            # TypeScript type definitions
+└── index.ts                     # Main entry point
 ```
 
-## 스케줄 설정
+## Schedule Configuration
 
-Cron 표현식을 사용하여 실행 주기를 설정할 수 있습니다:
+You can configure the execution interval using cron expressions:
 
-- `*/5 * * * *` - 5분마다
-- `*/1 * * * *` - 1분마다
-- `0 * * * *` - 매시간
+- `*/5 * * * *` - Every 5 minutes
+- `*/1 * * * *` - Every minute
+- `0 * * * *` - Every hour
 
-## 라이선스
+## How It Works
+
+1. **Market Discovery**: Fetches active markets from Polymarket API
+2. **Price Calculation**: For each market, calculates:
+   - Buy price: Sum of Yes and No token ask prices
+   - Sell price: Sum of Yes and No token bid prices
+3. **Arbitrage Detection**:
+   - **Buy Opportunity**: When buy price < 100 (can buy fullset for less than 100)
+   - **Sell Opportunity**: When sell price > 100 (can sell fullset for more than 100)
+4. **Data Storage**: Saves detected opportunities to the database
+
+## License
 
 ISC
