@@ -1,6 +1,6 @@
-// Polymarket API 응답 타입 정의
+// Polymarket API response type definitions
 
-// gamma-api.polymarket.com 응답은 직접 배열
+// gamma-api.polymarket.com response is a direct array
 export type MarketsResponse = Market[];
 
 export interface Market {
@@ -8,23 +8,23 @@ export interface Market {
   question: string;
   conditionId: string;
   slug: string;
-  clobTokenIds?: string; // 콤마로 구분된 토큰 ID 문자열
-  outcomes?: string; // 콤마로 구분된 outcome 문자열
-  outcomePrices?: string; // 콤마로 구분된 가격 문자열
+  clobTokenIds?: string; // Comma-separated token ID string
+  outcomes?: string; // Comma-separated outcome string
+  outcomePrices?: string; // Comma-separated price string
   enableOrderBook: boolean;
   active: boolean;
   closed: boolean;
   archived: boolean;
   acceptingOrders: boolean;
   endDateIso?: string;
-  [key: string]: any; // 기타 필드들
+  [key: string]: any; // Other fields
 }
 
 export interface TokenInfo {
   tokenId: string;
-  outcome: string; // "Yes" or "No" 또는 다른 outcome 이름
+  outcome: string; // "Yes" or "No" or other outcome name
   price?: number;
-  [key: string]: any; // 기타 필드들
+  [key: string]: any; // Other fields
 }
 
 export interface OrderbookResponse {
@@ -42,19 +42,20 @@ export interface Order {
 export interface TokenPair {
   marketId: string;
   conditionId: string;
+  type: "buy" | "sell"; // Buy opportunity or Sell opportunity
   yesToken: string;
   noToken: string;
   question: string;
-  slug?: string; // Polymarket 마켓 slug (링크 생성용)
+  slug?: string; // Polymarket market slug (for generating link)
 }
 
 export interface PriceData {
   yesToken: string;
   noToken: string;
-  yesAskPrice: number; // yes 토큰 ask 가격 (즉시 구매 가격)
-  yesBidPrice: number; // yes 토큰 bid 가격 (즉시 판매 가격)
-  noAskPrice: number; // no 토큰 ask 가격 (즉시 구매 가격)
-  noBidPrice: number; // no 토큰 bid 가격 (즉시 판매 가격)
-  fullsetBuyPrice: number; // asks 합 (yesAskPrice + noAskPrice) - Buy 기회 체크용
-  fullsetSellPrice: number; // bids 합 (yesBidPrice + noBidPrice) - Sell 기회 체크용
+  yesAskPrice: number; // Yes token ask price (immediate buy price)
+  yesBidPrice: number; // Yes token bid price (immediate sell price)
+  noAskPrice: number; // No token ask price (immediate buy price)
+  noBidPrice: number; // No token bid price (immediate sell price)
+  fullsetBuyPrice: number; // Asks sum (yesAskPrice + noAskPrice) - for Buy opportunity check
+  fullsetSellPrice: number; // Bids sum (yesBidPrice + noBidPrice) - for Sell opportunity check
 }

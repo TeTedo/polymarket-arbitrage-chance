@@ -31,6 +31,12 @@ export class ArbitrageOpportunity {
   @Column({ type: "varchar", length: 10 })
   type!: string; // "buy" or "sell"
 
+  @Column({ type: "varchar", length: 500, nullable: true })
+  link!: string; // Polymarket market link
+
+  @Column({ type: "text", nullable: true })
+  question!: string; // Market question
+
   @CreateDateColumn()
   createdAt!: Date;
 }

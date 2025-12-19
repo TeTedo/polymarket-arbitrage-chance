@@ -4,13 +4,13 @@ import { PolymarketClient } from "../api/polymarketClient";
 import { TokenPair, PriceData } from "../types/polymarket";
 
 /**
- * Polymarket 마켓 링크 생성
+ * Generate Polymarket market link
  */
 export function getPolymarketLink(marketId: string, slug?: string): string {
   if (slug) {
     return `https://polymarket.com/event/${slug}`;
   }
-  // slug가 없으면 conditionId로 링크 생성 (덜 정확할 수 있음)
+  // If slug is not available, use conditionId (may be less accurate)
   return `https://polymarket.com/market/${marketId}`;
 }
 
@@ -22,13 +22,13 @@ export class ArbitrageService {
   }
 
   /**
-   * 모든 마켓에서 아비트라지 기회를 스캔하고 DB에 저장
+   * Scan all markets for arbitrage opportunities and save to database
    */
   async scanAndSaveOpportunities(): Promise<void> {
     try {
-      console.log("마켓 정보를 가져오는 중...");
+      console.log("Fetching market information...");
       const markets = await this.client.getMarkets();
-      console.log(`총 ${markets.length}개의 마켓을 발견했습니다.`);
+      console.log(`Found ${markets.length} markets.`);
 
       const opportunities: Array<{
         marketId: string;
@@ -37,77 +37,98 @@ export class ArbitrageService {
         buyPrice: number;
         sellPrice: number;
         type: string;
+        link: string;
+        question: string;
       }> = [];
 
       for (const market of markets) {
         try {
-          // Buy 기회와 Sell 기회를 각각 체크
-          // Buy는 asks만, Sell은 bids만 필요하므로 각각 필요한 가격만 가져옴
-          const [buyPrice, sellPrice] = await Promise.all([
-            this.client.getBuyPriceData(market),
-            this.client.getSellPriceData(market),
-          ]);
+          // Check only Buy or Sell opportunity based on market.type
+          if (market.type === "buy") {
+            // Buy opportunity: check if asks sum is less than 100
+            const buyPrice = await this.client.getBuyPriceData(market);
 
-          // 1. Buy 기회 확인: asks 합이 100 미만인 경우
-          if (buyPrice !== null && buyPrice < 100) {
-            opportunities.push({
-              marketId: market.marketId,
-              yesToken: market.yesToken,
-              noToken: market.noToken,
-              buyPrice: buyPrice,
-              sellPrice: sellPrice || 0, // Sell 가격이 없을 수 있음
-              type: "buy",
-            });
-            const marketLink = getPolymarketLink(market.marketId, market.slug);
-            console.log(
-              `[구매 기회] ${market.marketId}: 구매가 ${buyPrice.toFixed(
-                4
-              )} | ${marketLink}`
-            );
+            if (buyPrice !== null && buyPrice < 100) {
+              // Also fetch sell price for reference
+              const sellPrice = await this.client.getSellPriceData(market);
+              const marketLink = getPolymarketLink(
+                market.marketId,
+                market.slug
+              );
+
+              opportunities.push({
+                marketId: market.marketId,
+                yesToken: market.yesToken,
+                noToken: market.noToken,
+                buyPrice: buyPrice,
+                sellPrice: sellPrice || 0,
+                type: "buy",
+                link: marketLink,
+                question: market.question,
+              });
+              console.log(
+                `[Buy Opportunity] ${
+                  market.marketId
+                }: Buy price ${buyPrice.toFixed(4)} | ${marketLink}`
+              );
+            }
+          } else if (market.type === "sell") {
+            // Sell opportunity: check if bids sum is greater than 100
+            const sellPrice = await this.client.getSellPriceData(market);
+
+            if (sellPrice !== null && sellPrice > 100) {
+              // Also fetch buy price for reference
+              const buyPrice = await this.client.getBuyPriceData(market);
+              const marketLink = getPolymarketLink(
+                market.marketId,
+                market.slug
+              );
+
+              opportunities.push({
+                marketId: market.marketId,
+                yesToken: market.yesToken,
+                noToken: market.noToken,
+                buyPrice: buyPrice || 0,
+                sellPrice: sellPrice,
+                type: "sell",
+                link: marketLink,
+                question: market.question,
+              });
+              console.log(
+                `[Sell Opportunity] ${
+                  market.marketId
+                }: Sell price ${sellPrice.toFixed(4)} | ${marketLink}`
+              );
+            }
           }
 
-          // 2. Sell 기회 확인: bids 합이 100 초과인 경우
-          if (sellPrice !== null && sellPrice > 100) {
-            opportunities.push({
-              marketId: market.marketId,
-              yesToken: market.yesToken,
-              noToken: market.noToken,
-              buyPrice: buyPrice || 0, // Buy 가격이 없을 수 있음
-              sellPrice: sellPrice,
-              type: "sell",
-            });
-            const marketLink = getPolymarketLink(market.marketId, market.slug);
-            console.log(
-              `[판매 기회] ${market.marketId}: 판매가 ${sellPrice.toFixed(
-                4
-              )} | ${marketLink}`
-            );
-          }
-
-          // API 호출 제한을 고려한 딜레이
+          // Delay to respect API rate limits
           await this.delay(100);
         } catch (error) {
-          console.error(`마켓 ${market.marketId} 처리 중 오류:`, error);
+          console.error(
+            `Error processing market ${market.marketId} (${market.type}):`,
+            error
+          );
         }
       }
 
-      // DB에 저장
+      // Save to database
       if (opportunities.length > 0) {
         await this.saveOpportunities(opportunities);
         console.log(
-          `${opportunities.length}개의 아비트라지 기회를 DB에 저장했습니다.`
+          `Saved ${opportunities.length} arbitrage opportunities to database.`
         );
       } else {
-        console.log("아비트라지 기회가 발견되지 않았습니다.");
+        console.log("No arbitrage opportunities found.");
       }
     } catch (error) {
-      console.error("아비트라지 스캔 중 오류:", error);
+      console.error("Error scanning arbitrage opportunities:", error);
       throw error;
     }
   }
 
   /**
-   * 아비트라지 기회를 DB에 저장
+   * Save arbitrage opportunities to database
    */
   private async saveOpportunities(
     opportunities: Array<{
@@ -117,12 +138,14 @@ export class ArbitrageService {
       buyPrice: number;
       sellPrice: number;
       type: string;
+      link: string;
+      question: string;
     }>
   ): Promise<void> {
     try {
       const repository = AppDataSource.getRepository(ArbitrageOpportunity);
 
-      // 기존 기회와 중복 체크를 위해 배치로 저장
+      // Save in batch to check for duplicates
       for (const opp of opportunities) {
         const entity = repository.create({
           marketId: opp.marketId,
@@ -131,25 +154,27 @@ export class ArbitrageService {
           buyPrice: opp.buyPrice,
           sellPrice: opp.sellPrice,
           type: opp.type,
+          link: opp.link,
+          question: opp.question,
         });
 
         try {
           await repository.save(entity);
         } catch (error: any) {
-          // 중복 키 에러는 무시 (이미 존재하는 기회)
+          // Ignore duplicate key errors (opportunity already exists)
           if (error.code !== "ER_DUP_ENTRY") {
-            console.error("기회 저장 중 오류:", error);
+            console.error("Error saving opportunity:", error);
           }
         }
       }
     } catch (error) {
-      console.error("DB 저장 중 오류:", error);
+      console.error("Error saving to database:", error);
       throw error;
     }
   }
 
   /**
-   * 지연 함수
+   * Delay function
    */
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

@@ -8,7 +8,7 @@ export class ArbitrageScheduler {
   private schedule: string;
 
   constructor(schedule: string = "*/5 * * * *") {
-    // 기본값: 5분마다 실행
+    // Default: run every 5 minutes
     this.schedule = schedule;
     const client = new PolymarketClient(
       process.env.POLYMARKET_API_BASE_URL || "https://gamma-api.polymarket.com"
@@ -17,53 +17,53 @@ export class ArbitrageScheduler {
   }
 
   /**
-   * 스케줄러 시작
+   * Start scheduler
    */
   start(): void {
     if (this.cronJob) {
-      console.log("스케줄러가 이미 실행 중입니다.");
+      console.log("Scheduler is already running.");
       return;
     }
 
-    console.log(`스케줄러 시작: ${this.schedule}`);
+    console.log(`Starting scheduler: ${this.schedule}`);
 
-    // 즉시 한 번 실행
+    // Run immediately once
     this.runTask();
 
-    // 스케줄에 따라 주기적으로 실행
+    // Run periodically according to schedule
     this.cronJob = cron.schedule(this.schedule, () => {
       this.runTask();
     });
 
-    console.log("스케줄러가 시작되었습니다.");
+    console.log("Scheduler started.");
   }
 
   /**
-   * 스케줄러 중지
+   * Stop scheduler
    */
   stop(): void {
     if (this.cronJob) {
       this.cronJob.stop();
       this.cronJob = null;
-      console.log("스케줄러가 중지되었습니다.");
+      console.log("Scheduler stopped.");
     }
   }
 
   /**
-   * 실제 작업 실행
+   * Execute actual task
    */
   private async runTask(): Promise<void> {
     const startTime = Date.now();
-    console.log(`\n[${new Date().toISOString()}] 아비트라지 스캔 시작...`);
+    console.log(`\n[${new Date().toISOString()}] Starting arbitrage scan...`);
 
     try {
       await this.service.scanAndSaveOpportunities();
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(
-        `[${new Date().toISOString()}] 스캔 완료 (소요 시간: ${duration}초)`
+        `[${new Date().toISOString()}] Scan completed (duration: ${duration}s)`
       );
     } catch (error) {
-      console.error(`[${new Date().toISOString()}] 스캔 중 오류 발생:`, error);
+      console.error(`[${new Date().toISOString()}] Error during scan:`, error);
     }
   }
 }

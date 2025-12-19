@@ -24,95 +24,95 @@ export class PolymarketClient {
   }
 
   /**
-   * 모든 마켓 정보 가져오기
+   * Fetch all market information
    */
   async getMarkets(): Promise<TokenPair[]> {
     try {
       const pairs: TokenPair[] = [];
       let offset = 0;
-      const limit = 1000; // 한 번에 가져올 최대 개수
+      const limit = 1000; // Maximum number of items to fetch at once
       let hasMore = true;
 
       while (hasMore) {
-        // Polymarket Gamma API 엔드포인트 - 열려있는 마켓만 필터링
+        // Polymarket Gamma API endpoint - filter only open markets
         const response = await this.client.get<MarketsResponse>("/markets", {
           params: {
-            closed: false, // 닫히지 않은 마켓만
+            closed: false, // Only non-closed markets
             limit: limit,
             offset: offset,
-            order: "createdAt", // 생성일 기준 정렬
-            ascending: false, // 최신순
+            order: "createdAt", // Sort by creation date
+            ascending: false, // Newest first
           },
         });
 
-        // 응답이 배열인지 확인
+        // Check if response is an array
         if (!Array.isArray(response.data)) {
           throw new Error("Invalid API response format: expected array");
         }
 
-        // 더 이상 데이터가 없으면 종료
+        // Exit if no more data
         if (response.data.length === 0) {
           hasMore = false;
           break;
         }
 
         for (const market of response.data) {
-          // 기본 필수 조건: 활성화되고 아카이브되지 않은 마켓만 처리
-          // closed는 이미 쿼리 파라미터로 필터링됨
+          // Basic required conditions: only process active and non-archived markets
+          // closed is already filtered by query parameter
           if (!market.active || market.archived) {
             continue;
           }
 
-          // conditionId가 없는 마켓은 건너뛰기
+          // Skip markets without conditionId
           if (!market.conditionId) {
             continue;
           }
 
-          // clobTokenIds가 없는 마켓은 건너뛰기
+          // Skip markets without clobTokenIds
           if (!market.clobTokenIds) {
             continue;
           }
 
-          // clobTokenIds 파싱 (JSON 배열 또는 콤마로 구분된 문자열)
+          // Parse clobTokenIds (JSON array or comma-separated string)
           let tokenIds: string[] = [];
           try {
-            // JSON 배열인지 확인
+            // Check if it's a JSON array
             if (market.clobTokenIds.startsWith("[")) {
               tokenIds = JSON.parse(market.clobTokenIds);
             } else {
-              // 콤마로 구분된 문자열
+              // Comma-separated string
               tokenIds = market.clobTokenIds.split(",");
             }
           } catch {
-            // 파싱 실패 시 콤마로 분리 시도
+            // If parsing fails, try splitting by comma
             tokenIds = market.clobTokenIds.split(",");
           }
 
-          // 토큰 ID 정리 (공백, 대괄호, 따옴표 제거)
+          // Clean token IDs (remove spaces, brackets, quotes)
           tokenIds = tokenIds
             .map((id) => {
-              // 문자열에서 숫자만 추출
+              // Extract only numbers from string
               const cleaned = id.trim().replace(/[\[\]"]/g, "");
               return cleaned;
             })
-            .filter((id) => id.length > 0); // 빈 문자열 제거
+            .filter((id) => id.length > 0); // Remove empty strings
 
           if (tokenIds.length < 2) {
             continue;
           }
 
-          // outcomes 파싱 (있는 경우)
+          // Parse outcomes (if available)
           let outcomes: string[] = [];
           if (market.outcomes) {
             outcomes = market.outcomes.split(",").map((o) => o.trim());
           }
 
-          // Yes/No 토큰 찾기
+          // Find Yes/No tokens
           let yesTokenId: string | undefined;
           let noTokenId: string | undefined;
 
           if (outcomes.length >= 2) {
-            // outcomes 배열에서 Yes/No 찾기
+            // Find Yes/No in outcomes array
             const yesIndex = outcomes.findIndex(
               (o) => o.toLowerCase() === "yes" || o === "1"
             );
@@ -128,28 +128,39 @@ export class PolymarketClient {
             }
           }
 
-          // Yes/No를 찾지 못한 경우 첫 번째와 두 번째 토큰 사용
+          // If Yes/No not found, use first and second tokens
           if (!yesTokenId || !noTokenId) {
             yesTokenId = tokenIds[0];
             noTokenId = tokenIds[1];
           }
 
           if (yesTokenId && noTokenId) {
+            // Create separate Buy and Sell opportunities for each market
             pairs.push({
               marketId: market.conditionId,
               conditionId: market.conditionId,
+              type: "buy", // Buy opportunity
               yesToken: yesTokenId,
               noToken: noTokenId,
               question: market.question,
-              slug: market.slug, // Polymarket 링크 생성용
+              slug: market.slug, // For generating Polymarket link
+            });
+            pairs.push({
+              marketId: market.conditionId,
+              conditionId: market.conditionId,
+              type: "sell", // Sell opportunity
+              yesToken: yesTokenId,
+              noToken: noTokenId,
+              question: market.question,
+              slug: market.slug, // For generating Polymarket link
             });
           }
         }
 
-        // 다음 페이지로 이동
+        // Move to next page
         offset += response.data.length;
 
-        // 가져온 데이터가 limit보다 적으면 마지막 페이지
+        // If fetched data is less than limit, it's the last page
         if (response.data.length < limit) {
           hasMore = false;
         }
@@ -163,12 +174,12 @@ export class PolymarketClient {
   }
 
   /**
-   * 특정 토큰의 오더북 가져오기
+   * Fetch orderbook for a specific token
    */
   async getOrderbook(tokenId: string): Promise<OrderbookResponse | null> {
     try {
-      // Polymarket CLOB API 엔드포인트 (clob.polymarket.com 사용)
-      // gamma-api와는 다른 도메인이므로 별도 클라이언트 필요할 수 있음
+      // Polymarket CLOB API endpoint (uses clob.polymarket.com)
+      // Different domain from gamma-api, so separate client may be needed
       const clobClient = axios.create({
         baseURL: "https://clob.polymarket.com",
         timeout: 15000,
@@ -188,16 +199,12 @@ export class PolymarketClient {
 
       return response.data;
     } catch (error: any) {
-      console.error(
-        `Error fetching orderbook for token ${tokenId}:`,
-        error.message
-      );
       return null;
     }
   }
 
   /**
-   * Buy 기회 체크용 가격 데이터 가져오기 (asks만)
+   * Get price data for Buy opportunity check (asks only)
    */
   async getBuyPriceData(pair: TokenPair): Promise<number | null> {
     const [yesOrderbook, noOrderbook] = await Promise.all([
@@ -209,7 +216,7 @@ export class PolymarketClient {
       return null;
     }
 
-    // Ask 가격 (즉시 구매 가격)
+    // Ask price (immediate buy price)
     const yesAskPrice = this.getBestAsk(yesOrderbook.asks);
     const noAskPrice = this.getBestAsk(noOrderbook.asks);
 
@@ -217,12 +224,11 @@ export class PolymarketClient {
       return null;
     }
 
-    console.log("ask: " + (yesAskPrice + noAskPrice) * 100);
     return (yesAskPrice + noAskPrice) * 100;
   }
 
   /**
-   * Sell 기회 체크용 가격 데이터 가져오기 (bids만)
+   * Get price data for Sell opportunity check (bids only)
    */
   async getSellPriceData(pair: TokenPair): Promise<number | null> {
     const [yesOrderbook, noOrderbook] = await Promise.all([
@@ -234,7 +240,7 @@ export class PolymarketClient {
       return null;
     }
 
-    // Bid 가격 (즉시 판매 가격)
+    // Bid price (immediate sell price)
     const yesBidPrice = this.getBestBid(yesOrderbook.bids);
     const noBidPrice = this.getBestBid(noOrderbook.bids);
 
@@ -242,13 +248,12 @@ export class PolymarketClient {
       return null;
     }
 
-    console.log("bid: " + (yesBidPrice + noBidPrice) * 100);
     return (yesBidPrice + noBidPrice) * 100;
   }
 
   /**
-   * 토큰 페어의 전체 가격 데이터 가져오기 (Buy/Sell 모두)
-   * @deprecated Buy/Sell을 각각 체크하려면 getBuyPriceData/getSellPriceData 사용 권장
+   * Get full price data for token pair (both Buy/Sell)
+   * @deprecated Use getBuyPriceData/getSellPriceData to check Buy/Sell separately
    */
   async getPriceData(pair: TokenPair): Promise<PriceData | null> {
     const [yesOrderbook, noOrderbook] = await Promise.all([
@@ -260,11 +265,11 @@ export class PolymarketClient {
       return null;
     }
 
-    // Ask 가격 (즉시 구매 가격) - Buy 기회 체크용
+    // Ask price (immediate buy price) - for Buy opportunity check
     const yesAskPrice = this.getBestAsk(yesOrderbook.asks);
     const noAskPrice = this.getBestAsk(noOrderbook.asks);
 
-    // Bid 가격 (즉시 판매 가격) - Sell 기회 체크용
+    // Bid price (immediate sell price) - for Sell opportunity check
     const yesBidPrice = this.getBestBid(yesOrderbook.bids);
     const noBidPrice = this.getBestBid(noOrderbook.bids);
 
@@ -277,12 +282,12 @@ export class PolymarketClient {
       return null;
     }
 
-    // Fullset 가격 계산
-    // Buy 기회: asks 합 < 100 이면 아비트라지 (Yes + No를 모두 구매해서 fullset 생성)
-    // Sell 기회: bids 합 > 100 이면 아비트라지 (Yes + No를 모두 판매해서 fullset 판매)
-    // 주의: Polymarket 가격이 0-1 범위면 100을 곱해야 함, 0-100 범위면 그대로 사용
-    const fullsetBuyPrice = yesAskPrice + noAskPrice; // asks 합
-    const fullsetSellPrice = yesBidPrice + noBidPrice; // bids 합
+    // Calculate fullset price
+    // Buy opportunity: if asks sum < 100, arbitrage (buy Yes + No to create fullset)
+    // Sell opportunity: if bids sum > 100, arbitrage (sell Yes + No to sell fullset)
+    // Note: If Polymarket price is 0-1 range, multiply by 100; if 0-100 range, use as is
+    const fullsetBuyPrice = yesAskPrice + noAskPrice; // asks sum
+    const fullsetSellPrice = yesBidPrice + noBidPrice; // bids sum
 
     return {
       yesToken: pair.yesToken,
@@ -297,7 +302,7 @@ export class PolymarketClient {
   }
 
   /**
-   * 가장 낮은 ask 가격 반환 (즉시 구매 가격)
+   * Return lowest ask price (immediate buy price)
    */
   private getBestAsk(asks: Order[]): number | null {
     if (!asks || asks.length === 0) return null;
@@ -306,7 +311,7 @@ export class PolymarketClient {
   }
 
   /**
-   * 가장 높은 bid 가격 반환 (즉시 판매 가격)
+   * Return highest bid price (immediate sell price)
    */
   private getBestBid(bids: Order[]): number | null {
     if (!bids || bids.length === 0) return null;
